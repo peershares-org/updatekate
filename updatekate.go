@@ -5,16 +5,17 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"github.com/blang/semver"
-	"github.com/coreos/pkg/flagutil"
 	"io/ioutil"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/rest"
 	"log"
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/blang/semver"
+	"github.com/coreos/pkg/flagutil"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 )
 
 type K8Client struct {
@@ -88,7 +89,7 @@ func (k8 *K8Client) updateWebhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, err := k8.clientset.AppsV1beta1().Deployments(k8.namespace).Get(k8.deployment, metav1.GetOptions{})
+	result, err := k8.clientset.Extensions().Deployments(k8.namespace).Get(k8.deployment, metav1.GetOptions{})
 	if err != nil {
 		log.Printf("Error retrieving deployment info: %v", err.Error())
 		return
@@ -136,7 +137,7 @@ func (k8 *K8Client) updateWebhook(w http.ResponseWriter, r *http.Request) {
 func (k8 *K8Client) update(newVersion string) {
 
 	log.Println("Starting update....")
-	result, err := k8.clientset.AppsV1beta1().Deployments(k8.namespace).Get(k8.deployment, metav1.GetOptions{})
+	result, err := k8.clientset.Extensions().Deployments(k8.namespace).Get(k8.deployment, metav1.GetOptions{})
 	//error...abort
 	if err != nil {
 		log.Printf("Error fetching deployment: %v", err.Error())
@@ -145,7 +146,7 @@ func (k8 *K8Client) update(newVersion string) {
 	log.Printf("Updating container image to: %v", k8.dockerRepo+":"+newVersion)
 	result.Spec.Template.Spec.Containers[0].Image = k8.dockerRepo + ":" + newVersion
 	log.Println("Applying update")
-	_, err = k8.clientset.AppsV1beta1().Deployments(k8.namespace).Update(result)
+	_, err = k8.clientset.Extensions().Deployments(k8.namespace).Update(result)
 
 	//error..abort
 	if err != nil {
@@ -166,7 +167,7 @@ func (k8 *K8Client) update(newVersion string) {
 			break
 		}
 
-		updatedDep, err := k8.clientset.AppsV1beta1().Deployments(k8.namespace).Get(k8.deployment, metav1.GetOptions{})
+		updatedDep, err := k8.clientset.Extensions().Deployments(k8.namespace).Get(k8.deployment, metav1.GetOptions{})
 		if err != nil {
 			//wait an retry...
 			log.Print("Error fetching status...sleeping")
@@ -201,7 +202,7 @@ func (k8 *K8Client) doWebhook(notification *UpdatekateNotification) {
 
 func (k8 *K8Client) getInfo(w http.ResponseWriter, r *http.Request) {
 
-	result, err := k8.clientset.AppsV1beta1().Deployments(k8.namespace).Get(k8.deployment, metav1.GetOptions{})
+	result, err := k8.clientset.Extensions().Deployments(k8.namespace).Get(k8.deployment, metav1.GetOptions{})
 	if err != nil {
 		out := []byte(fmt.Sprintf("Not able to find %v deployment in %v namespace", k8.deployment, k8.namespace))
 		w.Write(out)
