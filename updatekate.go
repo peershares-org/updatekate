@@ -75,16 +75,21 @@ func (k8 *K8Client) updateWebhook(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(405) //method not allowed
 		return
 	}
-	qn := new(QuayNotification)
+	hn := new(HubNotification)
 
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
 		log.Printf("Error reading body of POST")
 	}
-	json.Unmarshal(body, &qn)
+	r.Body.Close()
+	err = json.Unmarshal(body, &hn)
+	if err != nil {
+		w.WriteHeader(500)
+		return
+	}
 
-	if k8.dockerRepo != qn.Repository {
-		log.Printf("NOT going to update deployment! Expected repo %v and got repo %v", k8.dockerRepo, qn.Repository)
+	if k8.dockerRepo != hn.Repository.RepoName {
+		log.Printf("NOT going to update deployment! Expected repo %v and got repo %v", k8.dockerRepo, hn.Repository.RepoName)
 		w.WriteHeader(409) //conflict seems appropriate
 		return
 	}
@@ -107,27 +112,27 @@ func (k8 *K8Client) updateWebhook(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("Current version of image is %v", currentVersionTag)
 	var newTag string
-	for _, newVer := range qn.UpdatedTags {
+	newVer := hn.PushData.Tag
 
-		tagVer, _ := semver.Make(newVer)
-		log.Printf("Found tag %v", newVer)
-		log.Printf("New major: %v", tagVer.Major)
-		log.Printf("New minor: %v", tagVer.Minor)
-		log.Printf("New path: %v", tagVer.Patch)
-		log.Printf("New build: %v", tagVer.Build)
-		log.Printf("New pre: %v", tagVer.Pre)
-		log.Printf("New version string: %v", tagVer.String())
+	tagVer, _ := semver.Make(newVer)
+	log.Printf("Found tag %v", newVer)
+	log.Printf("New major: %v", tagVer.Major)
+	log.Printf("New minor: %v", tagVer.Minor)
+	log.Printf("New path: %v", tagVer.Patch)
+	log.Printf("New build: %v", tagVer.Build)
+	log.Printf("New pre: %v", tagVer.Pre)
+	log.Printf("New version string: %v", tagVer.String())
 
-		if newVer == "latest" {
-			continue
-		}
-		//we don't want latest tags because K8s won't re-pull them consistently
-		if currentVersion.LT(tagVer) {
-			log.Printf("Found newer version of image - %v ...applying", newTag)
-			newTag = newVer
-			go k8.update(newVer)
-			break
-		}
+	if newVer == "latest" {
+		//punt for now
+		w.WriteHeader(200)
+		return
+	}
+	//we don't want latest tags because K8s won't re-pull them consistently
+	if currentVersion.LT(tagVer) {
+		log.Printf("Found newer version of image - %v ...applying", newTag)
+		newTag = newVer
+		go k8.update(newVer)
 	}
 
 	//punt for now
@@ -223,11 +228,29 @@ type UpdatekateNotification struct {
 	Image      string `json:"docker_url"`
 }
 
-type QuayNotification struct {
-	Name        string   `json:"name"`
-	Repository  string   `json:"repository"`
-	Namespace   string   `json:"namespace"`
-	DockerURL   string   `json:"docker_url"`
-	Homepage    string   `json:"homepage"`
-	UpdatedTags []string `json:"updated_tags"`
+type HubNotification struct {
+	CallbackURL string `json:"callback_url"`
+	PushData    struct {
+		Images   []string `json:"images"`
+		PushedAt int      `json:"pushed_at"`
+		Pusher   string   `json:"pusher"`
+		Tag      string   `json:"tag"`
+	} `json:"push_data"`
+	Repository struct {
+		CommentCount    int    `json:"comment_count"`
+		DateCreated     int    `json:"date_created"`
+		Description     string `json:"description"`
+		Dockerfile      string `json:"dockerfile"`
+		FullDescription string `json:"full_description"`
+		IsOfficial      bool   `json:"is_official"`
+		IsPrivate       bool   `json:"is_private"`
+		IsTrusted       bool   `json:"is_trusted"`
+		Name            string `json:"name"`
+		Namespace       string `json:"namespace"`
+		Owner           string `json:"owner"`
+		RepoName        string `json:"repo_name"`
+		RepoURL         string `json:"repo_url"`
+		StarCount       int    `json:"star_count"`
+		Status          string `json:"status"`
+	} `json:"repository"`
 }
